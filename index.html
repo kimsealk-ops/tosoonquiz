@@ -55,6 +55,7 @@ textarea{min-height:170px}
 .item .nm{font-size:16px}.item .pr{font-size:16px}.item button{padding:6px;font-size:15px}.item.own{opacity:.75}
 .item input{width:100%;font-size:14px;padding:4px 6px;border-width:2px}
 .hide{display:none}
+.ansbox{margin-top:10px;padding:8px 12px;border:3px dashed var(--bd);border-radius:12px;text-align:center;font-size:20px;background:var(--soft)}
 .bub{position:absolute;top:0;left:50%;transform:translateX(-50%);z-index:2;background:var(--card);border:3px solid var(--bd);border-radius:14px;padding:6px 14px;font-size:20px;white-space:nowrap;box-shadow:0 3px 0 var(--sh);max-width:100%}
 .bub::after{content:"";position:absolute;left:50%;bottom:-11px;margin-left:-8px;border:8px solid transparent;border-top-color:var(--bd);border-bottom:0}
 .title{text-align:center}.title h1{margin:4px 0;font-size:34px}
@@ -87,11 +88,12 @@ textarea{min-height:170px}
 <section id="s2" class="hide">
 <div class="card">
 <div class="stage"><div id="bub" class="bub hide"></div><span id="hop" class="hop"><span class="rig" id="rigQ"><img id="rabbit" class="base" alt="토끼"></span></span></div>
-<div class="row" style="justify-content:center"><button id="m_mix" class="on">섞어서</button><button id="m_mc">4지선다</button><button id="m_sa">주관식</button></div>
+<div class="small" style="text-align:center;margin-top:6px">주관식 1번 → 객관식 2번 순서로 반복돼요</div>
 <div class="dir" id="dir" style="margin-top:12px"></div>
 <div class="q" id="q"></div>
 <div class="opts" id="opts"></div>
 <form id="saForm" class="hide" onsubmit="return false"><div class="row"><input type="text" id="ans" autocomplete="off" autocapitalize="off" placeholder="정답 입력"><button class="pri" id="sub" style="flex:0 0 80px">확인</button></div></form>
+<div class="ansbox hide" id="ansBox"></div>
 <div class="msg" id="msg"></div>
 <div class="row"><button id="next" class="pri hide">다음 문제</button></div>
 </div></section>
@@ -128,41 +130,59 @@ function face(name,ms){const r=$("rabbit"),h=$("hop");curFaceName=name;r.src=src
 function setCoins(n){coins=Math.max(0,n);$("coins").textContent=coins;persist()}
 function tab(n){[1,2,3,4].forEach(i=>{$("s"+i).classList.toggle("hide",n!==i);$("t"+i).classList.toggle("on",n===i)});if(n===2)nextQ();if(n===3){renderShop();duck("base","어서오세요 손님")}if(n===4)renderWardrobe()}
 const shuffle=a=>a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(x=>x[1]);
-const norm=s=>s.trim().toLowerCase().replace(/\s+/g," ");
+const norm=s=>String(s).trim().toLowerCase().replace(/[’‘`]/g,"'").replace(/\([^)]*\)/g,"").replace(/[~～]/g,"").replace(/[.!?。]+$/,"").replace(/\s+/g,"");
+let lastLenient=false;
+function lev(a,b){const d=[];for(let i=0;i<=a.length;i++)d[i]=[i];for(let j=1;j<=b.length;j++)d[0][j]=j;
+ for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++){const c=a[i-1]===b[j-1]?0:1;d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+c);if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])d[i][j]=Math.min(d[i][j],d[i-2][j-2]+1)}return d[a.length][b.length]}
+let deck=[],deckN=0,qIdx=0,lastW=null;
+function nextWord(){
+ if(!deck.length){deck=shuffle(words.slice());deckN=deck.length}
+ let k=deck.length-1;
+ if(lastW&&deck.length>1){ // 직전 문제와 같은 단어/같은 뜻은 피함
+  const bad=x=>x===lastW||norm(x.ko)===norm(lastW.ko)||norm(x.en)===norm(lastW.en);
+  if(bad(deck[k])){for(let m=deck.length-2;m>=0;m--)if(!bad(deck[m])){k=m;break}}}
+ const w=deck.splice(k,1)[0];lastW=w;return w}
+function answerText(){const w=cur.w,a=[],seen=new Set();
+ words.filter(x=>cur.toKo?norm(x.en)===norm(w.en):norm(x.ko)===norm(w.ko)).forEach(x=>{const s=cur.toKo?x.ko:x.en;if(!seen.has(norm(s))){seen.add(norm(s));a.push(s)}});
+ return a.join("  /  ")}
 function nextQ(){
- locked=false;$("msg").textContent="";$("msg").className="msg";$("next").classList.add("hide");$("bub").classList.add("hide");face("big");
+ locked=false;$("msg").textContent="";$("msg").className="msg";$("ansBox").classList.add("hide");$("next").classList.add("hide");$("bub").classList.add("hide");face("big");$("ans").disabled=false;
  if(words.length<1){$("q").textContent="먼저 단어를 입력해 주세요";$("dir").textContent="";$("opts").innerHTML="";$("saForm").classList.add("hide");return}
- let w;do{w=words[Math.floor(Math.random()*words.length)]}while(words.length>1&&cur&&w===cur.w);
- const toKo=Math.random()<.5;const type=mode==="mix"?(Math.random()<.5?"mc":"sa"):mode;
- const useMC=type==="mc"&&words.length>=4;
+ const w=nextWord(),toKo=Math.random()<.5,wantSA=(qIdx%3===0);qIdx++;
+ const useMC=!wantSA&&words.length>=4;
  cur={w,toKo,mc:useMC};
- $("dir").textContent=(toKo?"영어 → 한글":"한글 → 영어")+(useMC?" · 4지선다":" · 주관식");
+ $("dir").textContent=(toKo?"영어 → 한글":"한글 → 영어")+(useMC?" · 객관식":" · 주관식")+" · "+(deckN-deck.length)+" / "+deckN;
  $("q").textContent=toKo?w.en:w.ko;
  const ans=toKo?w.ko:w.en;
  $("opts").innerHTML="";$("saForm").classList.toggle("hide",useMC);
  if(useMC){
-  const wrong=shuffle(words.filter(x=>x!==w&&(toKo?x.ko:x.en)!==ans)).slice(0,3).map(x=>toKo?x.ko:x.en);
+  const seen=new Set([norm(ans)]),wrong=[];for(const x of shuffle(words.filter(x=>x!==w&&(toKo?norm(x.en)!==norm(w.en):norm(x.ko)!==norm(w.ko))))){const o=toKo?x.ko:x.en;if(!seen.has(norm(o))){seen.add(norm(o));wrong.push(o);if(wrong.length>=3)break}}
   shuffle([ans,...wrong]).forEach(o=>{const b=document.createElement("button");b.textContent=o;b.onclick=()=>judge(o,b);$("opts").appendChild(b)});
  }else{$("ans").value="";$("ans").focus({preventScroll:true})}
 }
-function correctList(){const a=cur.toKo?cur.w.ko:cur.w.en;return cur.toKo?a.split(/[,，]/).map(norm):[norm(a)]}
+function accepted(){const w=cur.w,set=new Set();
+ const add=s=>{const n=norm(s);if(n)set.add(n);String(s).split(/[,，;\/]/).forEach(p=>{const m=norm(p);if(m)set.add(m)})};
+ if(cur.toKo)words.filter(x=>norm(x.en)===norm(w.en)).forEach(x=>add(x.ko));
+ else words.filter(x=>norm(x.ko)===norm(w.ko)).forEach(x=>add(x.en));
+ return set}
+function isOk(val){lastLenient=false;const n=norm(val);if(!n)return false;const set=accepted();if(set.has(n))return true;
+ if(!cur.toKo&&!cur.mc&&n.length>=5){for(const s of set)if(Math.abs(s.length-n.length)<=1&&lev(s,n)<=1){lastLenient=true;return true}}return false}
 function judge(val,btn){
  if(locked||!cur)return;locked=true;
- const ok=correctList().includes(norm(val));
- const show=cur.toKo?cur.w.ko:cur.w.en;
- if(btn){btn.classList.add(ok?"right":"wrong");[...$("opts").children].forEach(b=>{if(correctList().includes(norm(b.textContent)))b.classList.add("right");b.disabled=true})}
- if(ok){setCoins(coins+5);(streak=0,face("happy"),say("언니 최고 ~~~"));$("msg").textContent="정답! +5코인";$("msg").className="msg ok"}
+ const ok=isOk(val);
+ const show=answerText();$("ans").disabled=true;$("ansBox").textContent="정답: "+show;$("ansBox").classList.remove("hide");
+ if(btn){btn.classList.add(ok?"right":"wrong");[...$("opts").children].forEach(b=>{if(accepted().has(norm(b.textContent)))b.classList.add("right");b.disabled=true})}
+ if(ok){setCoins(coins+5);(streak=0,face("happy"),say("언니 최고 ~~~"));$("msg").textContent="정답! +5코인"+(lastLenient?" (철자 확인: "+show+")":"");$("msg").className="msg ok"}
  else{setCoins(coins-10);wrongReply();$("msg").textContent="오답 -10코인 · 정답: "+show;$("msg").className="msg no"}
  $("next").classList.remove("hide");$("next").focus({preventScroll:true});
 }
-function setMode(m){mode=m;["mix","mc","sa"].forEach(x=>$("m_"+x).classList.toggle("on",x===m));nextQ()}
 $("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);
 $("save").onclick=()=>{const p=parse($("ta").value);if(!p.length){$("info").textContent="형식에 맞는 단어가 없어요. 예: apple - 사과";return}
- words=p;persist();$("info").textContent=p.length+"개 저장됨"+(p.length<4?" (4개 미만이라 4지선다 대신 주관식으로 나와요)":"");tab(2)};
+ words=p;deck=[];qIdx=0;persist();$("info").textContent=p.length+"개 저장됨"+(p.length<4?" (4개 미만이라 객관식 대신 주관식으로 나와요)":"");tab(2)};
 $("sub").onclick=()=>{if(locked){return}if(!$("ans").value.trim())return;judge($("ans").value)};
 $("ans").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();locked?nextQ():$("sub").click()}});
 $("next").onclick=nextQ;
-$("m_mix").onclick=()=>setMode("mix");$("m_mc").onclick=()=>setMode("mc");$("m_sa").onclick=()=>setMode("sa");
+
 load();$("coins").textContent=coins;$("ta").value=words.map(w=>w.en+" - "+w.ko).join("\n");
 $("info").textContent=words.length?words.length+"개 단어가 저장되어 있어요":"";face("big");
 
